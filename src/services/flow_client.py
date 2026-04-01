@@ -2375,7 +2375,7 @@ class FlowClient:
         elif method == "capmonster":
             client_key = config.capmonster_api_key
             base_url = config.capmonster_base_url
-            task_type = "RecaptchaV3EnterpriseTaskProxyless"
+            task_type = "RecaptchaV3EnterpriseTask"
         elif method == "ezcaptcha":
             client_key = config.ezcaptcha_api_key
             base_url = config.ezcaptcha_base_url
@@ -2399,14 +2399,17 @@ class FlowClient:
         try:
             async with AsyncSession() as session:
                 create_url = f"{base_url}/createTask"
+                task_payload: Dict[str, Any] = {
+                    "websiteURL": website_url,
+                    "websiteKey": website_key,
+                    "type": task_type,
+                    "pageAction": page_action
+                }
+                if method == "capmonster":
+                    task_payload["minScore"] = 0.7
                 create_data = {
                     "clientKey": client_key,
-                    "task": {
-                        "websiteURL": website_url,
-                        "websiteKey": website_key,
-                        "type": task_type,
-                        "pageAction": page_action
-                    }
+                    "task": task_payload
                 }
 
                 result = await session.post(create_url, json=create_data, impersonate="chrome110")
