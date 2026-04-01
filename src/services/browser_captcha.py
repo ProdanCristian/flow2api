@@ -664,12 +664,6 @@ class TokenBrowser:
             context = await browser.new_context(
                 viewport=viewport,
                 locale="en-US",
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                extra_http_headers={
-                    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-                    "sec-ch-ua-mobile": "?0",
-                    "sec-ch-ua-platform": '"Windows"',
-                },
             )
             await context.add_init_script("""
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
