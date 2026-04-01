@@ -762,6 +762,37 @@ class BrowserCaptchaService:
                 pass
             self._proxy_ext_dir = None
 
+    async def _test_proxy_connectivity(self, protocol, host, port, username, password):
+        """Quick Python-side test: can we reach a public endpoint through this proxy?
+        Returns True if the proxy is reachable and auth succeeds, False otherwise."""
+        import urllib.request
+        import base64
+
+        proxy_url = (
+            f"{protocol}://{username}:{password}@{host}:{port}"
+            if (username and password)
+            else f"{protocol}://{host}:{port}"
+        )
+        test_url = "http://connectivitycheck.gstatic.com/generate_204"
+
+        def _do_test():
+            proxy_handler = urllib.request.ProxyHandler({protocol: proxy_url})
+            opener = urllib.request.build_opener(proxy_handler)
+            req = urllib.request.Request(test_url, headers={"User-Agent": "curl/7.0"})
+            with opener.open(req, timeout=6) as resp:
+                return resp.status in (200, 204)
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, _do_test),
+                timeout=9.0,
+            )
+            return result
+        except Exception as e:
+            debug_logger.log_warning(f"[BrowserCaptcha] 代理连通性测试异常: {e}")
+            return False
+
     async def initialize(self):
         """初始化 nodriver 浏览器"""
         self._check_available()
@@ -834,14 +865,21 @@ class BrowserCaptchaService:
                 protocol, host, port, username, password = await self._resolve_personal_proxy()
                 proxy_server_arg = None
                 if protocol and host and port:
-                    if username and password:
-                        self._proxy_ext_dir = _create_proxy_auth_extension(protocol, host, port, username, password)
-                        debug_logger.log_info(
-                            f"[BrowserCaptcha] Personal 代理需要认证，已创建扩展: {self._proxy_ext_dir}"
+                    # Quick connectivity test before committing to this proxy
+                    proxy_ok = await self._test_proxy_connectivity(protocol, host, port, username, password)
+                    if proxy_ok:
+                        if username and password:
+                            self._proxy_ext_dir = _create_proxy_auth_extension(protocol, host, port, username, password)
+                            debug_logger.log_info(
+                                f"[BrowserCaptcha] Personal 代理需要认证，已创建扩展: {self._proxy_ext_dir}"
+                            )
+                        proxy_server_arg = f"--proxy-server={protocol}://{host}:{port}"
+                        self._proxy_url = f"{protocol}://{host}:{port}"
+                        debug_logger.log_info(f"[BrowserCaptcha] Personal 浏览器代理: {self._proxy_url}")
+                    else:
+                        debug_logger.log_warning(
+                            f"[BrowserCaptcha] Personal 代理连通性测试失败，使用直连 ({protocol}://{host}:{port})"
                         )
-                    proxy_server_arg = f"--proxy-server={protocol}://{host}:{port}"
-                    self._proxy_url = f"{protocol}://{host}:{port}"
-                    debug_logger.log_info(f"[BrowserCaptcha] Personal 浏览器代理: {self._proxy_url}")
 
                 browser_args = [
                     '--disable-quic',
