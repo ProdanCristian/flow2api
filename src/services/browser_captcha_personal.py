@@ -860,7 +860,6 @@ class BrowserCaptchaService:
                     '--disable-default-apps',
                     '--no-first-run',
                     '--no-default-browser-check',
-                    '--no-zygote',
                     '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 ]
                 if proxy_server_arg:
@@ -868,7 +867,9 @@ class BrowserCaptchaService:
                 if self._proxy_ext_dir:
                     browser_args.append(f'--load-extension={self._proxy_ext_dir}')
                 else:
+                    # no proxy extension - safe to disable all extensions and use no-zygote
                     browser_args.append('--disable-extensions')
+                    browser_args.append('--no-zygote')
 
                 effective_uid = "n/a"
                 if hasattr(os, "geteuid"):
@@ -903,6 +904,12 @@ class BrowserCaptchaService:
                     self._idle_reaper_task = asyncio.create_task(self._idle_tab_reaper_loop())
                 debug_logger.log_info(f"[BrowserCaptcha] ✅ nodriver 浏览器已启动 (Profile: {self.user_data_dir})")
 
+                # Inject stored session cookies so Google reCAPTCHA sees an authenticated user
+                try:
+                    await self._inject_session_cookies()
+                except Exception:
+                    pass
+
             except Exception as e:
                 self.browser = None
                 self._initialized = False
@@ -914,6 +921,51 @@ class BrowserCaptchaService:
                     f"args={' '.join(browser_args) if browser_args else '<none>'}"
                 )
                 raise
+
+    async def _inject_session_cookies(self, project_id: Optional[str] = None):
+        """Inject __Secure-next-auth.session-token from DB into the browser for labs.google.
+
+        Helps reCAPTCHA score by making Google see a logged-in user session.
+        Resolves the project_id → token_id → st chain; falls back to first active token.
+        """
+        if not self.db or not self.browser:
+            return
+        try:
+            st_value: Optional[str] = None
+            if project_id:
+                try:
+                    project = await self.db.get_project_by_id(project_id)
+                    if project and project.token_id:
+                        token = await self.db.get_token(project.token_id)
+                        if token and token.is_active and token.st:
+                            st_value = token.st
+                except Exception:
+                    pass
+            if not st_value:
+                try:
+                    tokens = await self.db.get_active_tokens()
+                    if tokens:
+                        st_value = next((t.st for t in tokens if t.st), None)
+                except Exception:
+                    pass
+            if not st_value:
+                return
+            await self._browser_send_command(
+                "Network.setCookie",
+                {
+                    "name": "__Secure-next-auth.session-token",
+                    "value": st_value,
+                    "url": "https://labs.google",
+                    "secure": True,
+                    "httpOnly": True,
+                    "sameSite": "None",
+                },
+                label="inject_session_cookie",
+                timeout_seconds=5.0,
+            )
+            debug_logger.log_info("[BrowserCaptcha] ✅ 已注入 Google Labs 会话 Cookie")
+        except Exception as e:
+            debug_logger.log_warning(f"[BrowserCaptcha] 注入会话 Cookie 失败: {e}")
 
     async def warmup_resident_tabs(self, project_ids: Iterable[str], limit: Optional[int] = None) -> list[str]:
         """预热共享打码标签页池，减少首个请求的冷启动抖动。"""
@@ -1814,9 +1866,15 @@ class BrowserCaptchaService:
             ResidentTabInfo 对象，或 None（创建失败）
         """
         try:
-            # 使用 Flow API 地址作为基础页面
+            # Use Flow API address as base page
             website_url = "https://labs.google/fx/api/auth/providers"
             debug_logger.log_info(f"[BrowserCaptcha] 创建共享常驻标签页 slot={slot_id}, seed_project={project_id}")
+
+            # Inject/refresh the session cookie for this project before navigating
+            try:
+                await self._inject_session_cookies(project_id=project_id)
+            except Exception:
+                pass
 
             async with self._resident_lock:
                 existing_tabs = [info.tab for info in self._resident_tabs.values() if info.tab]
@@ -1949,6 +2007,11 @@ class BrowserCaptchaService:
                 debug_logger.log_info(
                     f"[BrowserCaptcha] [Legacy] 创建独立临时标签页执行验证，避免污染 resident/custom 页面: {website_url}"
                 )
+                # Refresh session cookie before navigation
+                try:
+                    await self._inject_session_cookies(project_id=project_id)
+                except Exception:
+                    pass
                 tab = await self._browser_get(
                     website_url,
                     label=f"legacy_browser_get:{project_id}",
