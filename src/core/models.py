@@ -43,6 +43,10 @@ class Token(BaseModel):
     # 打码代理（token 级，可覆盖全局浏览器打码代理）
     captcha_proxy_url: Optional[str] = None
 
+    # Google account cookies for personal-mode reCAPTCHA scoring
+    # Semicolon-separated name=value pairs, e.g. "SID=xxx;SSID=yyy;SAPISID=zzz"
+    google_cookies: Optional[str] = None
+
     # 429禁用相关
     ban_reason: Optional[str] = None  # 禁用原因: "429_rate_limit" 或 None
     banned_at: Optional[datetime] = None  # 禁用时间

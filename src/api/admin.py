@@ -468,6 +468,7 @@ class AddTokenRequest(BaseModel):
     project_name: Optional[str] = None
     remark: Optional[str] = None
     captcha_proxy_url: Optional[str] = None
+    google_cookies: Optional[str] = None  # Google account cookies for personal-mode captcha
     image_enabled: bool = True
     video_enabled: bool = True
     image_concurrency: int = -1
@@ -480,6 +481,7 @@ class UpdateTokenRequest(BaseModel):
     project_name: Optional[str] = None
     remark: Optional[str] = None
     captcha_proxy_url: Optional[str] = None
+    google_cookies: Optional[str] = None  # Google account cookies for personal-mode captcha
     image_enabled: Optional[bool] = None
     video_enabled: Optional[bool] = None
     image_concurrency: Optional[int] = None
@@ -547,6 +549,7 @@ class ImportTokenItem(BaseModel):
     session_token: Optional[str] = None
     is_active: bool = True
     captcha_proxy_url: Optional[str] = None
+    google_cookies: Optional[str] = None  # Google account cookies for personal-mode captcha
     image_enabled: bool = True
     video_enabled: bool = True
     image_concurrency: int = -1
@@ -681,6 +684,7 @@ async def add_token(
             project_name=request.project_name,
             remark=request.remark,
             captcha_proxy_url=request.captcha_proxy_url.strip() if request.captcha_proxy_url is not None else None,
+            google_cookies=request.google_cookies.strip() if request.google_cookies else None,
             image_enabled=request.image_enabled,
             video_enabled=request.video_enabled,
             image_concurrency=request.image_concurrency,
@@ -744,6 +748,7 @@ async def update_token(
             project_name=request.project_name,
             remark=request.remark,
             captcha_proxy_url=request.captcha_proxy_url.strip() if request.captcha_proxy_url is not None else None,
+            google_cookies=request.google_cookies.strip() if request.google_cookies else None,
             image_enabled=request.image_enabled,
             video_enabled=request.video_enabled,
             image_concurrency=request.image_concurrency,
@@ -945,6 +950,7 @@ async def import_tokens(
                         at=at,
                         at_expires=at_expires,
                         captcha_proxy_url=item.captcha_proxy_url.strip() if item.captcha_proxy_url is not None else None,
+                        google_cookies=item.google_cookies.strip() if item.google_cookies else None,
                         image_enabled=item.image_enabled,
                         video_enabled=item.video_enabled,
                         image_concurrency=item.image_concurrency,
@@ -968,6 +974,7 @@ async def import_tokens(
                     new_token = await token_manager.add_token(
                         st=st,
                         captcha_proxy_url=item.captcha_proxy_url.strip() if item.captcha_proxy_url is not None else None,
+                        google_cookies=item.google_cookies.strip() if item.google_cookies else None,
                         image_enabled=item.image_enabled,
                         video_enabled=item.video_enabled,
                         image_concurrency=item.image_concurrency,

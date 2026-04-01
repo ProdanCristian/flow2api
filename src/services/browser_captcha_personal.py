@@ -860,7 +860,6 @@ class BrowserCaptchaService:
                     '--disable-default-apps',
                     '--no-first-run',
                     '--no-default-browser-check',
-                    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 ]
                 if proxy_server_arg:
                     browser_args.append(proxy_server_arg)
@@ -923,47 +922,101 @@ class BrowserCaptchaService:
                 raise
 
     async def _inject_session_cookies(self, project_id: Optional[str] = None):
-        """Inject __Secure-next-auth.session-token from DB into the browser for labs.google.
+        """Inject __Secure-next-auth.session-token from DB into the browser for labs.google,
+        AND inject Google account cookies (.google.com) so reCAPTCHA Enterprise recognises a
+        real logged-in Google user (raises score from 0.1 to 0.7+).
 
-        Helps reCAPTCHA score by making Google see a logged-in user session.
-        Resolves the project_id → token_id → st chain; falls back to first active token.
+        Google cookie format stored in Token.google_cookies:
+          semicolon-separated name=value pairs, e.g.:
+          "SID=xxx;SSID=yyy;HSID=zzz;SAPISID=aaa;__Secure-1PSID=bbb"
         """
         if not self.db or not self.browser:
             return
         try:
             st_value: Optional[str] = None
+            google_cookies_raw: Optional[str] = None
+            token_obj = None
+
             if project_id:
                 try:
                     project = await self.db.get_project_by_id(project_id)
                     if project and project.token_id:
-                        token = await self.db.get_token(project.token_id)
-                        if token and token.is_active and token.st:
-                            st_value = token.st
+                        token_obj = await self.db.get_token(project.token_id)
+                        if token_obj and token_obj.is_active:
+                            if token_obj.st:
+                                st_value = token_obj.st
+                            google_cookies_raw = getattr(token_obj, "google_cookies", None)
                 except Exception:
                     pass
-            if not st_value:
+
+            if not st_value or not google_cookies_raw:
                 try:
                     tokens = await self.db.get_active_tokens()
-                    if tokens:
-                        st_value = next((t.st for t in tokens if t.st), None)
+                    for t in tokens:
+                        if not st_value and t.st:
+                            st_value = t.st
+                        if not google_cookies_raw:
+                            google_cookies_raw = getattr(t, "google_cookies", None)
+                        if st_value and google_cookies_raw:
+                            break
                 except Exception:
                     pass
-            if not st_value:
-                return
-            await self._browser_send_command(
-                "Network.setCookie",
-                {
-                    "name": "__Secure-next-auth.session-token",
-                    "value": st_value,
-                    "url": "https://labs.google",
-                    "secure": True,
-                    "httpOnly": True,
-                    "sameSite": "None",
-                },
-                label="inject_session_cookie",
-                timeout_seconds=5.0,
-            )
-            debug_logger.log_info("[BrowserCaptcha] ✅ 已注入 Google Labs 会话 Cookie")
+
+            # Inject NextAuth session cookie for labs.google
+            if st_value:
+                try:
+                    await self._browser_send_command(
+                        "Network.setCookie",
+                        {
+                            "name": "__Secure-next-auth.session-token",
+                            "value": st_value,
+                            "url": "https://labs.google",
+                            "secure": True,
+                            "httpOnly": True,
+                            "sameSite": "None",
+                        },
+                        label="inject_session_cookie",
+                        timeout_seconds=5.0,
+                    )
+                    debug_logger.log_info("[BrowserCaptcha] ✅ 已注入 labs.google 会话 Cookie")
+                except Exception as e:
+                    debug_logger.log_warning(f"[BrowserCaptcha] 注入 labs.google Cookie 失败: {e}")
+
+            # Inject Google account cookies (.google.com) — key for reCAPTCHA score
+            if google_cookies_raw:
+                injected = 0
+                secure_prefixes = ("__Secure-", "__Host-")
+                for pair in google_cookies_raw.split(";"):
+                    pair = pair.strip()
+                    if not pair or "=" not in pair:
+                        continue
+                    name, _, value = pair.partition("=")
+                    name = name.strip()
+                    value = value.strip()
+                    if not name or not value:
+                        continue
+                    is_secure = name.startswith(secure_prefixes)
+                    try:
+                        await self._browser_send_command(
+                            "Network.setCookie",
+                            {
+                                "name": name,
+                                "value": value,
+                                "domain": ".google.com",
+                                "path": "/",
+                                "secure": is_secure,
+                                "httpOnly": False,
+                                "sameSite": "None" if is_secure else "Lax",
+                            },
+                            label=f"inject_google_cookie:{name}",
+                            timeout_seconds=5.0,
+                        )
+                        injected += 1
+                    except Exception:
+                        pass
+                if injected:
+                    debug_logger.log_info(f"[BrowserCaptcha] ✅ 已注入 {injected} 个 Google 账户 Cookie (.google.com)")
+
         except Exception as e:
             debug_logger.log_warning(f"[BrowserCaptcha] 注入会话 Cookie 失败: {e}")
 

@@ -175,7 +175,8 @@ class TokenManager:
         video_enabled: bool = True,
         image_concurrency: int = -1,
         video_concurrency: int = -1,
-        captcha_proxy_url: Optional[str] = None
+        captcha_proxy_url: Optional[str] = None,
+        google_cookies: Optional[str] = None
     ) -> Token:
         """Add a new token and prepare its pooled projects."""
         existing_token = await self.db.get_token_by_st(st)
@@ -250,7 +251,8 @@ class TokenManager:
             video_enabled=video_enabled,
             image_concurrency=image_concurrency,
             video_concurrency=video_concurrency,
-            captcha_proxy_url=captcha_proxy_url
+            captcha_proxy_url=captcha_proxy_url,
+            google_cookies=google_cookies
         )
 
         token_id = await self.db.add_token(token)
@@ -280,7 +282,8 @@ class TokenManager:
         video_enabled: Optional[bool] = None,
         image_concurrency: Optional[int] = None,
         video_concurrency: Optional[int] = None,
-        captcha_proxy_url: Optional[str] = None
+        captcha_proxy_url: Optional[str] = None,
+        google_cookies: Optional[str] = None
     ):
         """Update token (支持修改project_id和project_name)
 
@@ -310,6 +313,8 @@ class TokenManager:
             update_fields["video_concurrency"] = video_concurrency
         if captcha_proxy_url is not None:
             update_fields["captcha_proxy_url"] = captcha_proxy_url
+        if google_cookies is not None:
+            update_fields["google_cookies"] = google_cookies
 
         # 检查token是否因429被禁用，如果是且未过期，则清空429状态
         token = await self.db.get_token(token_id)
