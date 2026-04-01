@@ -671,6 +671,12 @@ class TokenBrowser:
                     "sec-ch-ua-platform": '"Windows"',
                 },
             )
+            await context.add_init_script("""
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+window.chrome = {runtime: {}};
+""")
             browser_pid = self._extract_browser_pid(browser)
             if manage_slot_pid:
                 self._write_pid_file(browser_pid)

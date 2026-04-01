@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PLAYWRIGHT_BROWSERS_PATH=0 \
     ALLOW_DOCKER_HEADED_CAPTCHA=true \
     DISPLAY=:99 \
-    XVFB_WHD=1920x1080x24
+    XVFB_WHD=1920x1080x24 \
+    BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
 COPY requirements.txt ./
 
@@ -18,6 +19,12 @@ RUN apt-get update \
         curl \
         xvfb \
         fluxbox \
+        wget \
+        gnupg \
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt \
