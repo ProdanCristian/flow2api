@@ -803,6 +803,18 @@ async def disable_token(
     return {"success": True, "message": "Token已禁用"}
 
 
+@router.patch("/api/tokens/{token_id}/google-cookies")
+async def update_token_google_cookies(
+    token_id: int,
+    request: dict,
+    token: str = Depends(verify_admin_token)
+):
+    """Update only the google_cookies field for a token (no ST re-submission needed)."""
+    google_cookies = (request.get("google_cookies") or "").strip()
+    await db.update_token(token_id, google_cookies=google_cookies or None)
+    return {"success": True, "message": "Google Cookies 已更新"}
+
+
 @router.post("/api/tokens/{token_id}/refresh-credits")
 async def refresh_credits(
     token_id: int,
