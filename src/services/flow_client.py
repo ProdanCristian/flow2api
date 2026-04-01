@@ -2375,7 +2375,7 @@ class FlowClient:
         elif method == "capmonster":
             client_key = config.capmonster_api_key
             base_url = config.capmonster_base_url
-            task_type = "RecaptchaV3TaskProxyless"
+            task_type = "RecaptchaV3EnterpriseTaskProxyless"
         elif method == "ezcaptcha":
             client_key = config.ezcaptcha_api_key
             base_url = config.ezcaptcha_base_url
