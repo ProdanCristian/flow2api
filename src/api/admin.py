@@ -505,6 +505,7 @@ class CaptchaScoreTestRequest(BaseModel):
     action: Optional[str] = "homepage"
     verify_url: Optional[str] = "https://antcpt.com/score_detector/verify.php"
     enterprise: Optional[bool] = False
+    captcha_method: Optional[str] = None  # override the configured method for this test
 
 
 class GenerationConfigRequest(BaseModel):
@@ -1641,7 +1642,9 @@ async def test_captcha_score(
 
     started_at = time.time()
     captcha_config = await db.get_captcha_config()
-    captcha_method = (captcha_config.captcha_method or config.captcha_method or "").strip().lower()
+    # Allow per-request override; fall back to configured method
+    _req_method = (req.captcha_method or "").strip().lower()
+    captcha_method = _req_method or (captcha_config.captcha_method or config.captcha_method or "").strip().lower()
     browser_proxy_enabled = bool(captcha_config.browser_proxy_enabled)
     browser_proxy_url = captcha_config.browser_proxy_url or ""
 
