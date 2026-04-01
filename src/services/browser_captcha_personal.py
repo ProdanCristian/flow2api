@@ -1815,6 +1815,12 @@ class BrowserCaptchaService:
         await self.initialize()
         self._last_fingerprint = None
 
+        # Re-inject Google account cookies so reCAPTCHA can see an authenticated user
+        try:
+            await self._inject_session_cookies(project_id=project_id)
+        except Exception:
+            pass
+
         debug_logger.log_info(
             f"[BrowserCaptcha] 开始从共享打码池获取标签页 (project: {project_id}, 当前: {len(self._resident_tabs)}/{self._max_resident_tabs})"
         )
@@ -2372,6 +2378,14 @@ class BrowserCaptchaService:
         """
         await self.initialize()
         self._last_fingerprint = None
+
+        # Re-inject Google account cookies on every call — safe because CDP
+        # Network.setCookie is idempotent, and the browser may have been
+        # running before google_cookies were saved to the DB.
+        try:
+            await self._inject_session_cookies()
+        except Exception:
+            pass
 
         cache_key = f"{website_url}|{website_key}|{1 if enterprise else 0}"
         warmup_seconds = float(getattr(config, "browser_score_test_warmup_seconds", 12) or 12)
