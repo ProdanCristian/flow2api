@@ -861,6 +861,7 @@ class BrowserCaptchaService:
                     '--no-first-run',
                     '--no-default-browser-check',
                     '--no-zygote',
+                    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 ]
                 if proxy_server_arg:
                     browser_args.append(proxy_server_arg)
